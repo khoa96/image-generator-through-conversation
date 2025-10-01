@@ -1,0 +1,5 @@
+{
+  "name": "Image Generator through Conversation",
+  "description": "An application to generate consistent cartoon character images from dialogue scenes using AI. Users input a dialogue, configure characters with reference images, and generate images for each scene in the conversation.",
+  "requestFramePermissions": []
+}
