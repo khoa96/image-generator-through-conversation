@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { Character, Scene, Step } from './types';
+import { Character, Scene, Step, Settings } from './types';
 import StepIndicator from './components/StepIndicator';
 import Step1DialogueInput from './components/Step1DialogueInput';
 import Step2SetupReview from './components/Step2SetupReview';
@@ -16,37 +16,48 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [loadingMessage, setLoadingMessage] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
-    
-    const [apiKey, setApiKey] = useState<string | null>(() => localStorage.getItem('gemini_api_key'));
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-
-    const isApiKeySet = !!apiKey || !!process.env.API_KEY;
+    const [settings, setSettings] = useState<Settings>({
+        apiKey: null,
+        imageCount: 1,
+    });
 
     useEffect(() => {
-        if (!isApiKeySet) {
-            setError("Vui lòng thiết lập API Key của bạn trong phần Cài đặt (biểu tượng bánh răng ở góc trên bên phải) để sử dụng ứng dụng.");
-        } else {
-            setError(null);
+        try {
+            const savedSettings = localStorage.getItem('appSettings');
+            if (savedSettings) {
+                const parsedSettings = JSON.parse(savedSettings);
+                setSettings(currentSettings => ({...currentSettings, ...parsedSettings}));
+            }
+        } catch (e) {
+            console.error("Failed to parse settings from localStorage", e);
         }
-    }, [isApiKeySet]);
+    }, []);
 
-    const getGenAI = () => {
-        const keyToUse = apiKey || process.env.API_KEY;
-        if (!keyToUse) {
-            throw new Error("API Key not found.");
-        }
-        return new GoogleGenAI({ apiKey: keyToUse });
-    }
+    const handleSaveSettings = (newSettings: Settings) => {
+        setSettings(newSettings);
+        localStorage.setItem('appSettings', JSON.stringify(newSettings));
+        setIsSettingsModalOpen(false);
+    };
+
+    const getApiKey = useCallback(() => {
+        return settings.apiKey || process.env.API_KEY;
+    }, [settings.apiKey]);
 
     const handleAnalyzeDialogue = useCallback(async (script: string) => {
-        if (!isApiKeySet) return;
+        const apiKey = getApiKey();
+        if (!apiKey) {
+            setError("Vui lòng thiết lập API Key trong phần Cài đặt trước khi tiếp tục.");
+            return;
+        }
+
         setDialogue(script);
         setIsLoading(true);
         setLoadingMessage('Phân tích hội thoại, vui lòng đợi...');
         setError(null);
 
         try {
-            const ai = getGenAI();
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
                 contents: `Your task is to analyze a dialogue script. First, identify all unique character names (written in uppercase). Then, break the script down into individual scenes, with each scene corresponding to a single line of dialogue spoken by a character.
@@ -126,12 +137,12 @@ ${script}`,
 
         } catch (e) {
             console.error(e);
-            setError('Không thể phân tích hội thoại. Vui lòng kiểm tra lại định dạng hoặc API Key và thử lại.');
+            setError('Không thể phân tích hội thoại. Vui lòng kiểm tra lại định dạng và API Key.');
         } finally {
             setIsLoading(false);
             setLoadingMessage('');
         }
-    }, [isApiKeySet]);
+    }, [getApiKey]);
 
     const fileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -142,15 +153,44 @@ ${script}`,
         });
     };
     
+    const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+    const getErrorMessage = (e: any): { message: string, shouldStop: boolean } => {
+        let message = 'Đã xảy ra lỗi không mong muốn.';
+        let shouldStop = false;
+
+        const errorString = typeof e?.message === 'string' ? e.message : JSON.stringify(e);
+        
+        if (errorString.includes('quota') || errorString.includes('daily limit')) {
+            message = 'Bạn đã đạt đến giới hạn sử dụng API hàng ngày. Vui lòng thử lại sau 24 giờ hoặc sử dụng API Key khác.';
+            shouldStop = true;
+        } else if (errorString.includes('RESOURCE_EXHAUSTED')) {
+            message = 'Bạn đã vượt quá giới hạn API (yêu cầu/phút). Quá trình tạo ảnh đã bị dừng. Vui lòng đợi một lát rồi thử lại.';
+            shouldStop = true;
+        } else if (errorString.includes('API key not valid')) {
+            message = 'API Key không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.';
+            shouldStop = true;
+        }
+
+        return { message, shouldStop };
+    };
+
     const handleGenerateImages = useCallback(async () => {
-        if (!isApiKeySet) return;
+        const apiKey = getApiKey();
+        if (!apiKey) {
+            setError("Vui lòng thiết lập API Key trong phần Cài đặt trước khi tạo ảnh.");
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
         
-        const ai = getGenAI();
+        const ai = new GoogleGenAI({ apiKey });
         const scenesWithImages: Scene[] = [];
+        let processShouldStop = false;
 
         for(let i = 0; i < scenes.length; i++) {
+            if (processShouldStop) break;
             const scene = scenes[i];
             setLoadingMessage(`Đang tạo ảnh cho phân cảnh ${i + 1}/${scenes.length}...`);
             const generatedImagesForScene: string[] = [];
@@ -174,7 +214,11 @@ ${script}`,
                     }))
             );
 
-            for(let j = 0; j < 2; j++) { // Generate 2 images
+            for(let j = 0; j < settings.imageCount; j++) {
+                if (i > 0 || j > 0) {
+                    await delay(1200);
+                }
+
                 try {
                     const response = await ai.models.generateContent({
                         model: 'gemini-2.5-flash-image-preview',
@@ -189,12 +233,15 @@ ${script}`,
                         const base64Image = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
                         generatedImagesForScene.push(base64Image);
                     } else {
-                        generatedImagesForScene.push(''); // placeholder for failed image
+                        generatedImagesForScene.push('');
                     }
-                } catch(e) {
+                } catch(e: any) {
                     console.error(`Error generating image ${j+1} for scene ${i+1}:`, e);
-                    setError(`Lỗi khi tạo ảnh ${j+1} cho phân cảnh ${i+1}.`);
+                    const { message, shouldStop } = getErrorMessage(e);
+                    setError(message);
+                    processShouldStop = shouldStop;
                     generatedImagesForScene.push('');
+                    if (processShouldStop) break;
                 }
             }
             scenesWithImages.push({ ...scene, generatedImages: generatedImagesForScene });
@@ -205,14 +252,20 @@ ${script}`,
         setIsLoading(false);
         setLoadingMessage('');
 
-    }, [characters, scenes, isApiKeySet]);
+    }, [characters, scenes, settings.imageCount, getApiKey]);
 
      const handleRegenerateScene = useCallback(async (sceneId: string, additionalPrompt: string) => {
+        const apiKey = getApiKey();
+        if (!apiKey) {
+            setError("Vui lòng thiết lập API Key trong phần Cài đặt trước khi tạo ảnh.");
+            return;
+        }
+
         const sceneToRegenerate = scenes.find(s => s.id === sceneId);
-        if (!sceneToRegenerate || !isApiKeySet) return;
+        if (!sceneToRegenerate) return;
 
         const generatedImagesForScene: string[] = [];
-        const ai = getGenAI();
+        const ai = new GoogleGenAI({ apiKey });
         
         let promptText = `Generate a 16:9 cartoon style image for the following scene.
             Characters:
@@ -238,7 +291,10 @@ ${script}`,
                 }))
         );
 
-        for (let j = 0; j < 2; j++) {
+        for (let j = 0; j < settings.imageCount; j++) {
+            if (j > 0) {
+                await delay(1200);
+            }
             try {
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash-image-preview',
@@ -251,43 +307,29 @@ ${script}`,
                 } else {
                     generatedImagesForScene.push('');
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error(e);
-                setError(`Lỗi khi tạo lại ảnh cho phân cảnh.`);
+                const { message } = getErrorMessage(e);
+                setError(message);
                 generatedImagesForScene.push('');
             }
         }
 
         setScenes(scenes.map(s => s.id === sceneId ? { ...s, generatedImages: generatedImagesForScene, selectedImage: null } : s));
-    }, [scenes, characters, isApiKeySet]);
+    }, [scenes, characters, settings.imageCount, getApiKey]);
 
     const handleStartOver = () => {
         setCurrentStep(Step.DialogueInput);
         setDialogue('');
         setCharacters([]);
         setScenes([]);
-        if (!isApiKeySet) {
-             setError("Vui lòng thiết lập API Key của bạn trong phần Cài đặt (biểu tượng bánh răng ở góc trên bên phải) để sử dụng ứng dụng.");
-        } else {
-            setError(null);
-        }
+        setError(null);
         setIsLoading(false);
         setLoadingMessage('');
     };
-
-    const handleSaveApiKey = (newKey: string) => {
-        if (newKey) {
-            setApiKey(newKey);
-            localStorage.setItem('gemini_api_key', newKey);
-            setError(null); // Clear the error message once the key is set
-        } else {
-            setApiKey(null);
-            localStorage.removeItem('gemini_api_key');
-        }
-        setIsSettingsModalOpen(false);
-    }
     
     const renderCurrentStep = () => {
+        const isApiKeySet = !!getApiKey();
         switch (currentStep) {
             case Step.DialogueInput:
                 return <Step1DialogueInput onAnalyze={handleAnalyzeDialogue} initialDialogue={dialogue} isApiKeySet={isApiKeySet} />;
@@ -305,9 +347,10 @@ ${script}`,
                     setScenes={setScenes}
                     onStartOver={handleStartOver}
                     onRegenerate={handleRegenerateScene}
+                    imageCount={settings.imageCount}
                  />;
             default:
-                return <Step1DialogueInput onAnalyze={handleAnalyzeDialogue} initialDialogue={dialogue} isApiKeySet={isApiKeySet}/>;
+                return <Step1DialogueInput onAnalyze={handleAnalyzeDialogue} initialDialogue={dialogue} isApiKeySet={isApiKeySet} />;
         }
     };
 
@@ -320,7 +363,7 @@ ${script}`,
                     </h1>
                     <p className="text-gray-400 mt-2">Tạo ảnh nhân vật hoạt hình đồng nhất từ hội thoại</p>
                     <button 
-                        onClick={() => setIsSettingsModalOpen(true)} 
+                        onClick={() => setIsSettingsModalOpen(true)}
                         className="absolute top-0 right-0 p-2 text-gray-400 hover:text-white transition-colors"
                         aria-label="Settings"
                     >
@@ -348,11 +391,11 @@ ${script}`,
                     {renderCurrentStep()}
                 </main>
             </div>
-            <SettingsModal 
+            <SettingsModal
                 isOpen={isSettingsModalOpen}
                 onClose={() => setIsSettingsModalOpen(false)}
-                onSave={handleSaveApiKey}
-                currentApiKey={apiKey}
+                onSave={handleSaveSettings}
+                currentSettings={settings}
             />
         </div>
     );

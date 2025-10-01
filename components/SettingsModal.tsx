@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
+import { Settings } from '../types';
 import { XMarkIcon } from './icons';
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (apiKey: string) => void;
-    currentApiKey: string | null;
+    onSave: (settings: Settings) => void;
+    currentSettings: Settings;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, currentApiKey }) => {
-    const [localApiKey, setLocalApiKey] = useState(currentApiKey || '');
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, currentSettings }) => {
+    const [localSettings, setLocalSettings] = useState<Settings>(currentSettings);
 
     useEffect(() => {
-        setLocalApiKey(currentApiKey || '');
-    }, [currentApiKey, isOpen]);
+        setLocalSettings(currentSettings);
+    }, [currentSettings, isOpen]);
 
     if (!isOpen) return null;
 
     const handleSave = () => {
-        onSave(localApiKey);
+        onSave(localSettings);
+    };
+
+    const handleImageCountChange = (count: 1 | 2) => {
+        setLocalSettings(prev => ({ ...prev, imageCount: count }));
     };
 
     return (
@@ -31,22 +36,47 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
                     </button>
                 </div>
                 
-                <div>
-                    <label htmlFor="api-key-input" className="block text-sm font-medium text-gray-300 mb-2">
-                        Gemini API Key
-                    </label>
-                    <input
-                        id="api-key-input"
-                        type="password"
-                        value={localApiKey}
-                        onChange={(e) => setLocalApiKey(e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
-                        placeholder="Nhập API Key của bạn tại đây"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                        API Key của bạn sẽ được lưu trữ an toàn trong trình duyệt. 
-                        Bạn có thể lấy key tại <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Google AI Studio</a>.
-                    </p>
+                <div className="space-y-6">
+                    <div>
+                        <label htmlFor="api-key-input" className="block text-sm font-medium text-gray-300 mb-2">
+                            Gemini API Key
+                        </label>
+                        <input
+                            id="api-key-input"
+                            type="password"
+                            value={localSettings.apiKey || ''}
+                            onChange={(e) => setLocalSettings(prev => ({...prev, apiKey: e.target.value || null}))}
+                            className="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 focus:ring-purple-500 focus:border-purple-500"
+                            placeholder="Để trống để dùng key mặc định (nếu có)"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                            API Key của bạn sẽ được lưu trữ an toàn trong trình duyệt. 
+                            Bạn có thể lấy key tại <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Google AI Studio</a>.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Số lượng ảnh tạo ra cho mỗi phân cảnh
+                        </label>
+                        <div className="flex gap-4">
+                            <button 
+                                onClick={() => handleImageCountChange(1)}
+                                className={`flex-1 py-2 px-4 rounded-md font-semibold transition-colors ${localSettings.imageCount === 1 ? 'bg-purple-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
+                            >
+                                1 Ảnh (Tiết kiệm API)
+                            </button>
+                             <button 
+                                onClick={() => handleImageCountChange(2)}
+                                className={`flex-1 py-2 px-4 rounded-md font-semibold transition-colors ${localSettings.imageCount === 2 ? 'bg-purple-600 text-white' : 'bg-gray-700 hover:bg-gray-600'}`}
+                            >
+                                2 Ảnh (Nhiều lựa chọn)
+                            </button>
+                        </div>
+                         <p className="text-xs text-gray-500 mt-2">
+                            Tạo ít ảnh hơn sẽ giúp bạn tiết kiệm lượt gọi API hàng ngày.
+                        </p>
+                    </div>
                 </div>
 
                 <div className="flex justify-end gap-4 mt-8">

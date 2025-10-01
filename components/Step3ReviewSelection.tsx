@@ -3,7 +3,6 @@ import JSZip from 'jszip';
 import { Scene } from '../types';
 import SceneResultCard from './SceneResultCard';
 import ImagePreviewModal from './ImagePreviewModal';
-import DownloadModal from './DownloadModal';
 import { ArrowPathIcon } from './icons';
 
 // Define the necessary types for the File System Access API for TypeScript
@@ -19,14 +18,16 @@ declare global {
         }[];
     }
     interface FileSystemFileHandle {
-        // Fix: Corrected the signature of `createWritable` to be compatible with standard DOM types by accepting optional options.
         createWritable: (options?: { keepExistingData?: boolean }) => Promise<FileSystemWritableFileStream>;
     }
+    // Fix: Corrected the type definition for FileSystemWritableFileStream to align with standard DOM libs
     interface FileSystemWritableFileStream extends WritableStream {
-        // Fix: Broadened the type for the `data` parameter in `write` to match `FileSystemWriteChunkType` to resolve a type conflict.
-        write: (data: BufferSource | Blob | string) => Promise<void>;
-        close: () => Promise<void>;
+        write(data: FileSystemWriteChunkType): Promise<void>;
+        seek(position: number): Promise<void>;
+        truncate(size: number): Promise<void>;
     }
+    // FIX: Removed duplicate identifier 'FileSystemWriteChunkType'. This type is already
+    // available in the global scope in standard DOM library definitions.
 }
 
 interface Step3ReviewSelectionProps {
@@ -34,12 +35,12 @@ interface Step3ReviewSelectionProps {
     setScenes: React.Dispatch<React.SetStateAction<Scene[]>>;
     onStartOver: () => void;
     onRegenerate: (sceneId: string, additionalPrompt: string) => Promise<void>;
+    imageCount: number;
 }
 
-const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, setScenes, onStartOver, onRegenerate }) => {
+const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, setScenes, onStartOver, onRegenerate, imageCount }) => {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null);
-    const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
     const handleSelectImage = (sceneId: string, image: string) => {
         setScenes(scenes.map(s => s.id === sceneId ? { ...s, selectedImage: image } : s));
@@ -66,7 +67,6 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
 
     const scenesToDownload = scenes.filter(s => s.selectedImage);
     
-    // Fallback download method using an anchor tag
     const downloadWithLink = (blob: Blob) => {
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -77,9 +77,10 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
         URL.revokeObjectURL(link.href);
     };
 
-    const handleConfirmDownloadAndZip = async () => {
-        const zip = new JSZip();
+    const handleDownloadAll = async () => {
+        if (scenesToDownload.length === 0) return;
 
+        const zip = new JSZip();
         scenesToDownload.forEach((scene) => {
             if (scene.selectedImage) {
                 const base64Data = scene.selectedImage.split(',')[1];
@@ -90,8 +91,6 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
 
         try {
             const content = await zip.generateAsync({ type: 'blob' });
-
-            // Use the File System Access API if available to show a "Save As" dialog
             if (window.showSaveFilePicker) {
                  try {
                     const handle = await window.showSaveFilePicker({
@@ -105,21 +104,18 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
                     await writable.write(content);
                     await writable.close();
                 } catch (err: any) {
-                    // Handle user cancellation of the save dialog gracefully
                     if (err.name !== 'AbortError') {
                         console.error('Error using File System Access API, falling back.', err);
-                        downloadWithLink(content); // Fallback if there's an unexpected error
+                        downloadWithLink(content);
                     }
                 }
             } else {
-                // Fallback for browsers that don't support the API
                 downloadWithLink(content);
             }
         } catch (error) {
             console.error("Failed to generate zip file", error);
         }
     };
-
 
     return (
         <div className="space-y-8">
@@ -135,12 +131,13 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
                         onRegenerate={handleRegenerateClick}
                         isRegenerating={regeneratingSceneId === scene.id}
                         onDownload={downloadImage}
+                        imageCount={imageCount}
                     />
                 ))}
             </div>
             <div className="text-center mt-12 py-6 border-t border-gray-700 flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
-                    onClick={() => setIsDownloadModalOpen(true)}
+                    onClick={handleDownloadAll}
                     disabled={scenesToDownload.length === 0}
                     className="px-10 py-4 bg-green-600 text-white font-bold text-lg rounded-lg hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg shadow-green-600/30"
                 >
@@ -155,13 +152,6 @@ const Step3ReviewSelection: React.FC<Step3ReviewSelectionProps> = ({ scenes, set
                 </button>
             </div>
             {previewImage && <ImagePreviewModal imageSrc={previewImage} onClose={() => setPreviewImage(null)} />}
-            <DownloadModal
-                isOpen={isDownloadModalOpen}
-                onClose={() => setIsDownloadModalOpen(false)}
-                onConfirm={handleConfirmDownloadAndZip}
-                scenesToDownload={scenesToDownload}
-                allScenes={scenes}
-            />
         </div>
     );
 };

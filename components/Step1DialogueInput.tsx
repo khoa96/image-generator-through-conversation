@@ -10,7 +10,7 @@ const Step1DialogueInput: React.FC<Step1DialogueInputProps> = ({ onAnalyze, init
     const [dialogue, setDialogue] = useState(initialDialogue);
 
     const handleAnalyzeClick = () => {
-        if (dialogue.trim() && isApiKeySet) {
+        if (isApiKeySet && dialogue.trim()) {
             onAnalyze(dialogue);
         }
     };
@@ -27,8 +27,8 @@ const Step1DialogueInput: React.FC<Step1DialogueInputProps> = ({ onAnalyze, init
             />
             <div className="mt-6 text-center">
                  {!isApiKeySet && (
-                    <p className="text-yellow-400 mb-4 text-sm">Vui lòng thiết lập API Key trong phần Cài đặt trước khi tiếp tục.</p>
-                )}
+                    <p className="text-yellow-400 mb-4">Vui lòng thiết lập API Key trong phần Cài đặt (biểu tượng bánh răng ở góc trên bên phải) để tiếp tục.</p>
+                 )}
                 <button
                     onClick={handleAnalyzeClick}
                     disabled={!dialogue.trim() || !isApiKeySet}

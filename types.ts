@@ -18,3 +18,8 @@ export interface Scene {
     generatedImages: (string | null)[]; // Array of base64 image strings
     selectedImage: string | null;
 }
+
+export interface Settings {
+    apiKey: string | null;
+    imageCount: 1 | 2;
+}

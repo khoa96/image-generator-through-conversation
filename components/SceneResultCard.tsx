@@ -11,6 +11,7 @@ interface SceneResultCardProps {
     onRegenerate: (sceneId: string, additionalPrompt: string) => void;
     isRegenerating: boolean;
     onDownload: (image: string, fileName: string) => void;
+    imageCount: number;
 }
 
 const ImageColumn: React.FC<{
@@ -23,7 +24,7 @@ const ImageColumn: React.FC<{
 }> = ({ label, image, isSelected, onSelect, onPreview, onDownload }) => {
     if (!image) {
         return (
-            <div className="flex flex-col items-center justify-center bg-gray-900 aspect-video rounded-lg border-2 border-dashed border-gray-700">
+            <div className="flex flex-1 flex-col items-center justify-center bg-gray-900 aspect-video rounded-lg border-2 border-dashed border-gray-700">
                 <p className="text-gray-500">Tạo ảnh thất bại</p>
             </div>
         );
@@ -48,7 +49,7 @@ const ImageColumn: React.FC<{
     );
 };
 
-const SceneResultCard: React.FC<SceneResultCardProps> = ({ scene, sceneNumber, onSelect, onPreview, onRegenerate, isRegenerating, onDownload }) => {
+const SceneResultCard: React.FC<SceneResultCardProps> = ({ scene, sceneNumber, onSelect, onPreview, onRegenerate, isRegenerating, onDownload, imageCount }) => {
     const [additionalPrompt, setAdditionalPrompt] = useState('');
     
     return (
@@ -65,22 +66,17 @@ const SceneResultCard: React.FC<SceneResultCardProps> = ({ scene, sceneNumber, o
                 </div>
             ) : (
                 <div className="flex flex-col md:flex-row gap-6">
-                    <ImageColumn
-                        label="A"
-                        image={scene.generatedImages[0]}
-                        isSelected={scene.selectedImage === scene.generatedImages[0]}
-                        onSelect={() => scene.generatedImages[0] && onSelect(scene.id, scene.generatedImages[0])}
-                        onPreview={() => scene.generatedImages[0] && onPreview(scene.generatedImages[0])}
-                        onDownload={() => scene.generatedImages[0] && onDownload(scene.generatedImages[0], `scene_${sceneNumber}_A.png`)}
-                    />
-                    <ImageColumn
-                        label="B"
-                        image={scene.generatedImages[1]}
-                        isSelected={scene.selectedImage === scene.generatedImages[1]}
-                        onSelect={() => scene.generatedImages[1] && onSelect(scene.id, scene.generatedImages[1])}
-                        onPreview={() => scene.generatedImages[1] && onPreview(scene.generatedImages[1])}
-                        onDownload={() => scene.generatedImages[1] && onDownload(scene.generatedImages[1], `scene_${sceneNumber}_B.png`)}
-                    />
+                    {scene.generatedImages.map((image, index) => (
+                        <ImageColumn
+                            key={index}
+                            label={String.fromCharCode(65 + index)} // A, B
+                            image={image}
+                            isSelected={scene.selectedImage === image}
+                            onSelect={() => image && onSelect(scene.id, image)}
+                            onPreview={() => image && onPreview(image)}
+                            onDownload={() => image && onDownload(image, `scene_${sceneNumber}_${String.fromCharCode(65 + index)}.png`)}
+                        />
+                    ))}
                 </div>
             )}
 
@@ -104,7 +100,7 @@ const SceneResultCard: React.FC<SceneResultCardProps> = ({ scene, sceneNumber, o
                         className="inline-flex items-center mt-4 px-8 py-3 border border-transparent font-semibold rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-transform transform hover:scale-105"
                     >
                         <RefreshIcon className={`w-5 h-5 mr-2 ${isRegenerating ? 'animate-spin' : ''}`} />
-                        Tạo Lại 2 Ảnh Mới
+                        Tạo Lại {imageCount} Ảnh Mới
                     </button>
                 </div>
             </div>
