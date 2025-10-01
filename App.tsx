@@ -162,7 +162,7 @@ ${script}`,
         const errorString = typeof e?.message === 'string' ? e.message : JSON.stringify(e);
         
         if (errorString.includes('quota') || errorString.includes('daily limit')) {
-            message = 'Bạn đã đạt đến giới hạn sử dụng API hàng ngày. Vui lòng thử lại sau 24 giờ hoặc sử dụng API Key khác.';
+            message = 'Bạn đã đạt đến giới hạn sử dụng API hàng ngày. Vui lòng thử lại sau 24 giờ hoặc sử dụng API Key khác. Lưu ý: Nếu bạn đang sử dụng một API key mẫu từ internet, nó có thể đã bị sử dụng hết. Vui lòng tạo và sử dụng API key của riêng bạn từ Google AI Studio.';
             shouldStop = true;
         } else if (errorString.includes('RESOURCE_EXHAUSTED')) {
             message = 'Bạn đã vượt quá giới hạn API (yêu cầu/phút). Quá trình tạo ảnh đã bị dừng. Vui lòng đợi một lát rồi thử lại.';
